@@ -23,7 +23,7 @@
     - disable()/enable()/is_enabled() to change or get the PowerToy's enabled state,
     - get_config() to get the available configuration settings,
     - set_config() to set various settings,
-    - call_custom_action() when the user selects clicks a custom action in settings,
+    - call_custom_action() when the user selects or clicks a custom action in settings,
     - get_hotkeys() when the settings change, to make sure the hotkey(s) are up to date.
     - on_hotkey() when the corresponding hotkey is pressed.
 
