@@ -3,6 +3,7 @@ abcdefghjkmnpqrstuvxyz
 abgr
 ABlocked
 ABOUTBOX
+ABORTIFHUNG
 Abug
 Acceleratorkeys
 ACCEPTFILES
@@ -25,11 +26,13 @@ ADMINS
 adml
 admx
 advancedpaste
+advapi
 advfirewall
 AFeature
 affordances
 AFX
 AGGREGATABLE
+AHK
 AHybrid
 akv
 ALarger
@@ -38,12 +41,14 @@ ALLAPPS
 ALLCHILDREN
 ALLINPUT
 Allman
+Allmodule
 ALLOWUNDO
 ALLVIEW
 ALPHATYPE
 AModifier
 amr
 ANDSCANS
+animatedvisuals
 Animnate
 ANull
 AOC
@@ -64,11 +69,13 @@ APPMODEL
 APPNAME
 appref
 appsettings
+appsfeatures
 appwindow
 appwiz
 appxpackage
 APSTUDIO
 AQS
+Aquadrant
 ARandom
 ARCHITEW
 ARemapped
@@ -114,6 +121,7 @@ bigbar
 bigobj
 binlog
 binres
+binskim
 BITMAPFILEHEADER
 bitmapimage
 BITMAPINFO
@@ -125,7 +133,6 @@ bla
 BLACKFRAME
 BLENDFUNCTION
 Blockquotes
-blogs
 Blt
 BLURBEHIND
 BLURREGION
@@ -151,6 +158,7 @@ BUILDARCH
 BUILDNUMBER
 buildtransitive
 builttoroam
+BUNDLEINFO
 BVal
 BValue
 byapp
@@ -162,6 +170,7 @@ callbackptr
 calpwstr
 Cangjie
 CANRENAME
+Canvascustomlayout
 CAPTUREBLT
 CAPTURECHANGED
 CARETBLINKING
@@ -238,6 +247,7 @@ CONFIGW
 CONFLICTINGMODIFIERKEY
 CONFLICTINGMODIFIERSHORTCUT
 CONOUT
+coreclr
 constexpr
 contentdialog
 contentfiles
@@ -246,6 +256,7 @@ CONTEXTMENUHANDLER
 contractversion
 CONTROLPARENT
 copiedcolorrepresentation
+coppied
 copyable
 COPYPEN
 COREWINDOW
@@ -253,10 +264,13 @@ Corpor
 cotaskmem
 COULDNOT
 countof
+covrun
 cpcontrols
 cph
 cplusplus
 CPower
+cpptools
+cppvsdbg
 cppwinrt
 createdump
 CREATEPROCESS
@@ -268,6 +282,7 @@ CRH
 critsec
 cropandlock
 Crossdevice
+csdevkit
 CSearch
 CSettings
 cso
@@ -295,6 +310,7 @@ CXVIRTUALSCREEN
 CYSCREEN
 CYSMICON
 CYVIRTUALSCREEN
+Czechia
 cziplib
 Dac
 dacl
@@ -319,6 +335,7 @@ Deact
 debugbreak
 decryptor
 Dedup
+Deduplicator
 Deeplink
 DEFAULTBOOTSTRAPPERINSTALLFOLDER
 DEFAULTCOLOR
@@ -347,6 +364,7 @@ desktopshorcutinstalled
 DESKTOPVERTRES
 devblogs
 devdocs
+devenv
 devmgmt
 DEVMODE
 DEVMODEW
@@ -375,6 +393,7 @@ DNLEN
 DONOTROUND
 DONTVALIDATEPATH
 dotnet
+downscale
 DPICHANGED
 DPIs
 DPSAPI
@@ -391,6 +410,7 @@ DString
 DSVG
 DTo
 DUMMYUNIONNAME
+dutil
 DVASPECT
 DVASPECTINFO
 DVD
@@ -423,6 +443,7 @@ EDITSHORTCUTS
 EDITTEXT
 EFile
 ekus
+emojis
 ENABLEDELAYEDEXPANSION
 ENABLEDPOPUP
 ENABLETAB
@@ -432,6 +453,7 @@ encryptor
 ENDSESSION
 ENSUREVISIBLE
 ENTERSIZEMOVE
+ENTRYW
 ENU
 environmentvariables
 EOAC
@@ -444,6 +466,7 @@ ERRORIMAGE
 ERRORTITLE
 ESettings
 esrp
+etd
 ETDT
 etl
 etw
@@ -461,6 +484,7 @@ examplehandler
 examplepowertoy
 EXAND
 EXCLUDEFROMCAPTURE
+EXECUTEDEFAULT
 executionpolicy
 exename
 exf
@@ -484,7 +508,6 @@ FANCYZONESDRAWLAYOUTTEST
 FANCYZONESEDITOR
 FARPROC
 fesf
-fff
 FFFF
 FILEEXPLORER
 fileexploreraddons
@@ -528,8 +551,8 @@ frm
 FROMTOUCH
 fsanitize
 fsmgmt
-fxf
 fuzzingtesting
+fxf
 FZE
 gacutil
 Gaeilge
@@ -547,6 +570,7 @@ GETDESKWALLPAPER
 GETDLGCODE
 GETDPISCALEDSIZE
 getfilesiginforedist
+geolocator
 GETHOTKEY
 GETICON
 GETMINMAXINFO
@@ -556,6 +580,7 @@ GETSCREENSAVERRUNNING
 GETSECKEY
 GETSTICKYKEYS
 GETTEXTLENGTH
+gitmodules
 GHND
 GMEM
 GNumber
@@ -565,6 +590,7 @@ GPOCA
 gpp
 gpu
 gradians
+Gridcustomlayout
 GSM
 gtm
 guiddata
@@ -624,6 +650,7 @@ HKCU
 hkey
 HKLM
 HKM
+hkmng
 HKPD
 HKU
 HMD
@@ -632,6 +659,7 @@ hmodule
 hmonitor
 homies
 homljgmgpmcbpjbnjpfijnhipfkiclkd
+HOOKPROC
 HORZRES
 HORZSIZE
 Hostbackdropbrush
@@ -653,6 +681,7 @@ HROW
 hsb
 HSCROLL
 hsi
+HSpeed
 HTCLIENT
 hthumbnail
 HTOUCHINPUT
@@ -701,6 +730,7 @@ imageresizersettings
 imagingdevices
 ime
 imgflip
+inapp
 inbox
 INCONTACT
 Indo
@@ -734,6 +764,7 @@ INSTALLSTARTMENUSHORTCUT
 INSTALLSTATE
 Inste
 Interlop
+intput
 INTRESOURCE
 INVALIDARG
 invalidoperatioexception
@@ -753,6 +784,7 @@ istep
 ith
 ITHUMBNAIL
 IUI
+IUWP
 IWIC
 jfif
 jgeosdfsdsgmkedfgdfgdfgbkmhcgcflmi
@@ -773,6 +805,7 @@ KEYBOARDMANAGEREDITORLIBRARYWRAPPER
 keyboardmanagerstate
 keyboardmanagerui
 keyboardtester
+keycap
 KEYEVENTF
 KEYIMAGE
 keynum
@@ -782,11 +815,14 @@ keyvault
 KILLFOCUS
 killrunner
 kmph
+kvp
 Kybd
+LARGEICON
 lastcodeanalysissucceeded
 LASTEXITCODE
 LAYOUTRTL
 LCh
+lbl
 lcid
 LCIDTo
 lcl
@@ -805,10 +841,12 @@ LIBID
 LIMITSIZE
 LIMITTEXT
 lindex
+lightswitch
 linkid
 LINKOVERLAY
 LINQTo
 listview
+LIVEDRAW
 LIVEZOOM
 LLKH
 llkhf
@@ -816,6 +854,7 @@ LMEM
 LMENU
 LOADFROMFILE
 LOBYTE
+localappdata
 localpackage
 LOCALSYSTEM
 LOCATIONCHANGE
@@ -823,12 +862,15 @@ LOCKTYPE
 LOGFONT
 LOGFONTW
 logon
+LOGMSG
 LOGPIXELSX
 LOGPIXELSY
-LOn
+lng
+lon
 longdate
 LONGNAMES
 lowlevel
+lquadrant
 LOWORD
 lparam
 LPBITMAPINFOHEADER
@@ -875,7 +917,6 @@ luid
 LUMA
 lusrmgr
 LVal
-lvm
 LWA
 lwin
 LZero
@@ -956,6 +997,9 @@ mousepointer
 mouseutils
 MOVESIZEEND
 MOVESIZESTART
+muxx
+muxxc
+muxxh
 MRM
 MRT
 mru
@@ -964,6 +1008,7 @@ msc
 mscorlib
 msctls
 msdata
+msdia
 MSDL
 MSGFLT
 MSHCTX
@@ -981,6 +1026,7 @@ Mso
 msrc
 msstore
 msvcp
+MT
 MTND
 MULTIPLEUSE
 multizone
@@ -1091,6 +1137,7 @@ NOTSRCCOPY
 NOTSRCERASE
 notwindows
 NOTXORPEN
+nowarn
 NOZORDER
 NPH
 npmjs
@@ -1118,6 +1165,7 @@ oldtheme
 oleaut
 OLECHAR
 onebranch
+OOBEUI
 openas
 opencode
 OPENFILENAME
@@ -1146,8 +1194,10 @@ PACL
 PAINTSTRUCT
 PALETTEWINDOW
 PARENTNOTIFY
+PARENTRELATIVE
 PARENTRELATIVEEDITING
 PARENTRELATIVEFORADDRESSBAR
+PARENTRELATIVEFORUI
 PARENTRELATIVEPARSING
 parray
 PARTIALCONFIRMATIONDIALOGTITLE
@@ -1158,6 +1208,7 @@ PATPAINT
 pbc
 pbi
 PBlob
+pbrush
 pcb
 pcch
 pcelt
@@ -1191,6 +1242,7 @@ pgp
 pguid
 phbm
 phbmp
+phicon
 phwnd
 pici
 pidl
@@ -1199,6 +1251,7 @@ pinfo
 pinvoke
 pipename
 PKBDLLHOOKSTRUCT
+pkgfamily
 plib
 ploc
 ploca
@@ -1275,6 +1328,7 @@ PRTL
 prvpane
 psapi
 pscid
+pscustomobject
 PSECURITY
 psfgao
 psfi
@@ -1315,8 +1369,9 @@ quickaccent
 QUNS
 RAII
 RAlt
+RAquadrant
 randi
-Rasterization
+rasterization
 Rasterize
 RAWINPUTDEVICE
 RAWINPUTHEADER
@@ -1347,6 +1402,7 @@ regkey
 regroot
 regsvr
 REINSTALLMODE
+releaseblog
 reloadable
 Relogger
 remappings
@@ -1384,7 +1440,6 @@ RIGHTSCROLLBAR
 riid
 RKey
 RNumber
-Rns
 rop
 ROUNDSMALL
 ROWSETEXT
@@ -1395,7 +1450,7 @@ Rsp
 rstringalnum
 rstringalpha
 rstringdigit
-RTB
+rtb
 RTLREADING
 rtm
 runas
@@ -1433,6 +1488,7 @@ secpol
 securestring
 SEEMASKINVOKEIDLIST
 SELCHANGE
+selfhost
 SENDCHANGE
 sendvirtualinput
 serverside
@@ -1452,6 +1508,7 @@ SETRULES
 SETSCREENSAVEACTIVE
 SETSTICKYKEYS
 SETTEXT
+settingscard
 SETTINGCHANGE
 SETTINGSCHANGED
 settingsheader
@@ -1529,6 +1586,7 @@ SLGP
 sln
 SMALLICON
 smartphone
+smileys
 SMTO
 SNAPPROCESS
 snk
@@ -1607,6 +1665,7 @@ sublang
 SUBMODULEUPDATE
 subresource
 Superbar
+suntimes
 sut
 svchost
 SVGIn
@@ -1615,6 +1674,8 @@ svgz
 SVSI
 SWFO
 SWP
+SWPNOSIZE
+SWPNOZORDER
 SWRESTORE
 symbolrequestprod
 SYMCACHE
@@ -1670,6 +1731,7 @@ tgz
 themeresources
 THH
 THICKFRAME
+THEMECHANGED
 THISCOMPONENT
 throughs
 TILEDWINDOW
@@ -1685,9 +1747,9 @@ tkconverters
 tlb
 tlbimp
 tlc
+tmain
 TNP
 Toolhelp
-toolkitconverters
 toolwindow
 TOPDOWNDIB
 TOUCHEVENTF
@@ -1707,6 +1769,7 @@ trx
 tsa
 tskill
 tstoi
+tweakable
 TWF
 tymed
 TYPEKEYBOARD
@@ -1717,10 +1780,13 @@ UACUI
 UAL
 uap
 UBR
+UBreak
+ubrk
 UCallback
 ucrt
 ucrtd
 uefi
+UError
 uesc
 UFlags
 UHash
@@ -1728,12 +1794,14 @@ UIA
 UIEx
 uild
 uitests
+UITo
 ULONGLONG
 ums
 uncompilable
 UNCPRIORITY
 UNDNAME
 UNICODETEXT
+unins
 uninstalls
 Uniquifies
 unitconverter
@@ -1754,8 +1822,8 @@ Uptool
 urld
 Usb
 USEDEFAULT
-USEINSTALLERFORTEST
 USEFILEATTRIBUTES
+USEINSTALLERFORTEST
 USESHOWWINDOW
 USESTDHANDLES
 USRDLL
@@ -1789,6 +1857,7 @@ VFT
 vget
 vgetq
 viewmodels
+virama
 VIRTKEY
 VIRTUALDESK
 VISEGRADRELAY
@@ -1813,6 +1882,7 @@ VSINSTALLDIR
 VSM
 vso
 vsonline
+VSpeed
 vstemplate
 vstest
 VSTHRD
@@ -1869,6 +1939,7 @@ winexe
 winforms
 winget
 wingetcreate
+wingetpkgs
 Winhook
 WINL
 winlogon
@@ -1894,6 +1965,7 @@ WMI
 WMICIM
 wmimgmt
 wmp
+wmsg
 WMSYSCOMMAND
 wnd
 WNDCLASS
@@ -1907,6 +1979,7 @@ WORKSPACESEDITOR
 WORKSPACESLAUNCHER
 WORKSPACESSNAPSHOTTOOL
 WORKSPACESWINDOWARRANGER
+Worktree
 wox
 wparam
 wpf
@@ -1938,6 +2011,7 @@ XButton
 xclip
 xcopy
 XDeployment
+xdf
 XDocument
 XElement
 xfd
@@ -1948,10 +2022,13 @@ XNamespace
 Xoshiro
 XPels
 XPixel
+XPos
 XResource
 xsi
+XSpeed
 XStr
 xstyler
+XTimer
 XUP
 XVIRTUALSCREEN
 xxxxxx
@@ -1961,7 +2038,10 @@ YIncrement
 yinle
 yinyue
 YPels
+YPos
 YResolution
+YSpeed
+YTimer
 YStr
 YVIRTUALSCREEN
 ZEROINIT
