@@ -1,29 +1,16 @@
-﻿// Copyright (c) Microsoft Corporation
+// Copyright (c) Microsoft Corporation
 // The Microsoft Corporation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using CommunityToolkit.Mvvm.ComponentModel;
-using ManagedCommon;
 using Microsoft.CmdPal.UI.ViewModels.Settings;
-using Microsoft.CommandPalette.Extensions.Toolkit;
-using Windows.Foundation;
+using Windows.UI;
 
 namespace Microsoft.CmdPal.UI.ViewModels;
 
 public partial class SettingsModel : ObservableObject
 {
-    private const string DeprecatedHotkeyGoesHomeKey = "HotkeyGoesHome";
-
-    [JsonIgnore]
-    public static readonly string FilePath;
-
-    public event TypedEventHandler<SettingsModel, object?>? SettingsChanged;
-
     ///////////////////////////////////////////////////////////////////////////
     // SETTINGS HERE
     public static HotkeySettings DefaultActivationShortcut { get; } = new HotkeySettings(true, false, true, false, 0x20); // win+alt+space
@@ -40,6 +27,8 @@ public partial class SettingsModel : ObservableObject
 
     public bool HighlightSearchOnActivate { get; set; } = true;
 
+    public bool KeepPreviousQuery { get; set; }
+
     public bool ShowSystemTrayIcon { get; set; } = true;
 
     public bool IgnoreShortcutWhenFullscreen { get; set; }
@@ -47,6 +36,8 @@ public partial class SettingsModel : ObservableObject
     public bool AllowExternalReload { get; set; }
 
     public Dictionary<string, ProviderSettings> ProviderSettings { get; set; } = [];
+
+    public string[] FallbackRanks { get; set; } = [];
 
     public Dictionary<string, CommandAlias> Aliases { get; set; } = [];
 
@@ -60,13 +51,41 @@ public partial class SettingsModel : ObservableObject
 
     public TimeSpan AutoGoHomeInterval { get; set; } = Timeout.InfiniteTimeSpan;
 
+    public EscapeKeyBehavior EscapeKeyBehaviorSetting { get; set; } = EscapeKeyBehavior.ClearSearchFirstThenGoBack;
+
+    public bool EnableDock { get; set; }
+
+    public DockSettings DockSettings { get; set; } = new();
+
+    // Theme settings
+    public UserTheme Theme { get; set; } = UserTheme.Default;
+
+    public ColorizationMode ColorizationMode { get; set; }
+
+    public Color CustomThemeColor { get; set; } = new() { A = 0, R = 255, G = 255, B = 255 }; // Transparent — avoids WinUI3 COM dependency on Colors.Transparent
+
+    public int CustomThemeColorIntensity { get; set; } = 100;
+
+    public int BackgroundImageTintIntensity { get; set; }
+
+    public int BackgroundImageOpacity { get; set; } = 20;
+
+    public int BackgroundImageBlurAmount { get; set; }
+
+    public int BackgroundImageBrightness { get; set; }
+
+    public BackgroundImageFit BackgroundImageFit { get; set; }
+
+    public string? BackgroundImagePath { get; set; }
+
+    public BackdropStyle BackdropStyle { get; set; }
+
+    public int BackdropOpacity { get; set; } = 100;
+
+    // </Theme settings>
+
     // END SETTINGS
     ///////////////////////////////////////////////////////////////////////////
-
-    static SettingsModel()
-    {
-        FilePath = SettingsJsonPath();
-    }
 
     public ProviderSettings GetProviderSettings(CommandProviderWrapper provider)
     {
@@ -85,160 +104,23 @@ public partial class SettingsModel : ObservableObject
         return settings;
     }
 
-    public static SettingsModel LoadSettings()
+    public string[] GetGlobalFallbacks()
     {
-        if (string.IsNullOrEmpty(FilePath))
-        {
-            throw new InvalidOperationException($"You must set a valid {nameof(SettingsModel.FilePath)} before calling {nameof(LoadSettings)}");
-        }
+        var globalFallbacks = new HashSet<string>();
 
-        if (!File.Exists(FilePath))
+        foreach (var provider in ProviderSettings.Values)
         {
-            Debug.WriteLine("The provided settings file does not exist");
-            return new();
-        }
-
-        try
-        {
-            // Read the JSON content from the file
-            var jsonContent = File.ReadAllText(FilePath);
-            var loaded = JsonSerializer.Deserialize<SettingsModel>(jsonContent, JsonSerializationContext.Default.SettingsModel) ?? new();
-
-            var migratedAny = false;
-            try
+            foreach (var fallback in provider.FallbackCommands)
             {
-                if (JsonNode.Parse(jsonContent) is JsonObject root)
+                var fallbackSetting = fallback.Value;
+                if (fallbackSetting.IsEnabled && fallbackSetting.IncludeInGlobalResults)
                 {
-                    migratedAny |= ApplyMigrations(root, loaded);
+                    globalFallbacks.Add(fallback.Key);
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Migration check failed: {ex}");
-            }
-
-            Debug.WriteLine("Loaded settings file");
-
-            if (migratedAny)
-            {
-                SaveSettings(loaded);
-            }
-
-            return loaded;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
         }
 
-        return new();
-    }
-
-    private static bool ApplyMigrations(JsonObject root, SettingsModel model)
-    {
-        var migrated = false;
-
-        // Migration #1: HotkeyGoesHome (bool) -> AutoGoHomeInterval (TimeSpan)
-        // The old 'HotkeyGoesHome' boolean indicated whether the "go home" action should happen immediately (true) or never (false).
-        // The new 'AutoGoHomeInterval' uses a TimeSpan: 'TimeSpan.Zero' means immediate, 'Timeout.InfiniteTimeSpan' means never.
-        migrated |= TryMigrate(
-            "Migration #1: HotkeyGoesHome (bool) -> AutoGoHomeInterval (TimeSpan)",
-            root,
-            model,
-            nameof(AutoGoHomeInterval),
-            DeprecatedHotkeyGoesHomeKey,
-            (settingsModel, goesHome) => settingsModel.AutoGoHomeInterval = goesHome ? TimeSpan.Zero : Timeout.InfiniteTimeSpan,
-            JsonSerializationContext.Default.Boolean);
-
-        return migrated;
-    }
-
-    private static bool TryMigrate<T>(string migrationName, JsonObject root, SettingsModel model, string newKey, string oldKey, Action<SettingsModel, T> apply, JsonTypeInfo<T> jsonTypeInfo)
-    {
-        try
-        {
-            // If new key already present, skip migration
-            if (root.ContainsKey(newKey) && root[newKey] is not null)
-            {
-                return false;
-            }
-
-            // If old key present, try to deserialize and apply
-            if (root.TryGetPropertyValue(oldKey, out var oldNode) && oldNode is not null)
-            {
-                var value = oldNode.Deserialize<T>(jsonTypeInfo);
-                apply(model, value!);
-                return true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError($"Error during migration {migrationName}.", ex);
-        }
-
-        return false;
-    }
-
-    public static void SaveSettings(SettingsModel model)
-    {
-        if (string.IsNullOrEmpty(FilePath))
-        {
-            throw new InvalidOperationException($"You must set a valid {nameof(FilePath)} before calling {nameof(SaveSettings)}");
-        }
-
-        try
-        {
-            // Serialize the main dictionary to JSON and save it to the file
-            var settingsJson = JsonSerializer.Serialize(model, JsonSerializationContext.Default.SettingsModel);
-
-            // Is it valid JSON?
-            if (JsonNode.Parse(settingsJson) is JsonObject newSettings)
-            {
-                // Now, read the existing content from the file
-                var oldContent = File.Exists(FilePath) ? File.ReadAllText(FilePath) : "{}";
-
-                // Is it valid JSON?
-                if (JsonNode.Parse(oldContent) is JsonObject savedSettings)
-                {
-                    foreach (var item in newSettings)
-                    {
-                        savedSettings[item.Key] = item.Value?.DeepClone();
-                    }
-
-                    // Remove deprecated keys
-                    savedSettings.Remove(DeprecatedHotkeyGoesHomeKey);
-
-                    var serialized = savedSettings.ToJsonString(JsonSerializationContext.Default.Options);
-                    File.WriteAllText(FilePath, serialized);
-
-                    // TODO: Instead of just raising the event here, we should
-                    // have a file change watcher on the settings file, and
-                    // reload the settings then
-                    model.SettingsChanged?.Invoke(model, null);
-                }
-                else
-                {
-                    Debug.WriteLine("Failed to parse settings file as JsonObject.");
-                }
-            }
-            else
-            {
-                Debug.WriteLine("Failed to parse settings file as JsonObject.");
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex.ToString());
-        }
-    }
-
-    internal static string SettingsJsonPath()
-    {
-        var directory = Utilities.BaseSettingsPath("Microsoft.CmdPal");
-        Directory.CreateDirectory(directory);
-
-        // now, the settings is just next to the exe
-        return Path.Combine(directory, "settings.json");
+        return globalFallbacks.ToArray();
     }
 
     // [UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "<Pending>")]
@@ -260,6 +142,7 @@ public partial class SettingsModel : ObservableObject
 [JsonSerializable(typeof(int))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
+[JsonSerializable(typeof(Color))]
 [JsonSerializable(typeof(HistoryItem))]
 [JsonSerializable(typeof(SettingsModel))]
 [JsonSerializable(typeof(WindowPosition))]
@@ -281,4 +164,12 @@ public enum MonitorBehavior
     ToFocusedWindow = 2,
     InPlace = 3,
     ToLast = 4,
+}
+
+public enum EscapeKeyBehavior
+{
+    ClearSearchFirstThenGoBack = 0,
+    AlwaysGoBack = 1,
+    AlwaysDismiss = 2,
+    AlwaysHide = 3,
 }

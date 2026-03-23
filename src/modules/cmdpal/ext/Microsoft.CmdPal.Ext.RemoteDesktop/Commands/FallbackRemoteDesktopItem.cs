@@ -23,13 +23,16 @@ internal sealed partial class FallbackRemoteDesktopItem : FallbackCommandItem
         ];
 
     private static readonly CompositeFormat RemoteDesktopOpenHostFormat = CompositeFormat.Parse(Resources.remotedesktop_open_host);
+
     private readonly IRdpConnectionsManager _rdpConnectionsManager;
+    private readonly NoOpCommand _emptyCommand = new NoOpCommand();
 
     public FallbackRemoteDesktopItem(IRdpConnectionsManager rdpConnectionsManager)
-    : base(new OpenRemoteDesktopCommand(string.Empty), Resources.remotedesktop_title)
+    : base(Resources.remotedesktop_title, _id)
     {
         _rdpConnectionsManager = rdpConnectionsManager;
 
+        Command = _emptyCommand;
         Title = string.Empty;
         Subtitle = string.Empty;
         Icon = Icons.RDPIcon;
@@ -41,7 +44,7 @@ internal sealed partial class FallbackRemoteDesktopItem : FallbackCommandItem
         {
             Title = string.Empty;
             Subtitle = string.Empty;
-            Command = new OpenRemoteDesktopCommand(string.Empty);
+            Command = _emptyCommand;
             return;
         }
 
@@ -57,18 +60,34 @@ internal sealed partial class FallbackRemoteDesktopItem : FallbackCommandItem
             Title = connectionName;
             Subtitle = string.Format(CultureInfo.CurrentCulture, RemoteDesktopOpenHostFormat, connectionName);
         }
-        else if (ValidUriHostNameTypes.Contains(Uri.CheckHostName(query)))
-        {
-            var connectionName = query.Trim();
-            Command = new OpenRemoteDesktopCommand(connectionName);
-            Title = string.Format(CultureInfo.CurrentCulture, RemoteDesktopOpenHostFormat, connectionName);
-            Subtitle = Resources.remotedesktop_title;
-        }
         else
         {
-            Title = string.Empty;
-            Subtitle = string.Empty;
-            Command = new OpenRemoteDesktopCommand(string.Empty);
+            // Strip port suffix (e.g. "localhost:3389") before validation,
+            // since Uri.CheckHostName does not accept host:port strings.
+            var hostForValidation = query.Trim();
+            var lastColon = hostForValidation.LastIndexOf(':');
+            if (lastColon > 0 && lastColon < hostForValidation.Length - 1)
+            {
+                var portPart = hostForValidation.Substring(lastColon + 1);
+                if (ushort.TryParse(portPart, out _))
+                {
+                    hostForValidation = hostForValidation.Substring(0, lastColon);
+                }
+            }
+
+            if (ValidUriHostNameTypes.Contains(Uri.CheckHostName(hostForValidation)))
+            {
+                var connectionName = query.Trim();
+                Command = new OpenRemoteDesktopCommand(connectionName);
+                Title = string.Format(CultureInfo.CurrentCulture, RemoteDesktopOpenHostFormat, connectionName);
+                Subtitle = Resources.remotedesktop_title;
+            }
+            else
+            {
+                Title = string.Empty;
+                Subtitle = string.Empty;
+                Command = _emptyCommand;
+            }
         }
     }
 }

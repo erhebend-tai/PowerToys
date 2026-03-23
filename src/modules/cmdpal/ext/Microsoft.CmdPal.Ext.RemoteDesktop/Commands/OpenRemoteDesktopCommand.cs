@@ -40,13 +40,26 @@ internal sealed partial class OpenRemoteDesktopCommand : BaseObservable, IInvoka
     {
         using var process = new Process();
         process.StartInfo.UseShellExecute = false;
-        process.StartInfo.WorkingDirectory = Environment.SpecialFolder.MyDocuments.ToString();
+        process.StartInfo.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         process.StartInfo.FileName = "mstsc";
 
         if (!string.IsNullOrWhiteSpace(_rdpHost))
         {
             // validate that _rdpHost is a proper hostname or IP address
-            if (Uri.CheckHostName(_rdpHost) == UriHostNameType.Unknown)
+            // Strip port suffix (e.g. "localhost:3389") before validation,
+            // since Uri.CheckHostName does not accept host:port strings.
+            var hostForValidation = _rdpHost;
+            var lastColon = _rdpHost.LastIndexOf(':');
+            if (lastColon > 0 && lastColon < _rdpHost.Length - 1)
+            {
+                var portPart = _rdpHost.Substring(lastColon + 1);
+                if (ushort.TryParse(portPart, out _))
+                {
+                    hostForValidation = _rdpHost.Substring(0, lastColon);
+                }
+            }
+
+            if (Uri.CheckHostName(hostForValidation) == UriHostNameType.Unknown)
             {
                 return CommandResult.ShowToast(new ToastArgs()
                 {
