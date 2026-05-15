@@ -2,8 +2,10 @@
 // The Microsoft Corporation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using Microsoft.CmdPal.UI.ViewModels.Models;
+using Microsoft.CmdPal.UI.ViewModels.Services;
 using Microsoft.CmdPal.UI.ViewModels.Settings;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -15,10 +17,10 @@ namespace Microsoft.CmdPal.UI.ViewModels.Dock;
 public sealed partial class DockBandViewModel : ExtensionObjectViewModel
 {
     private readonly CommandItemViewModel _rootItem;
-    private readonly DockBandSettings _bandSettings;
-    private readonly DockSettings _dockSettings;
-    private readonly Action _saveSettings;
+    private readonly ISettingsService _settingsService;
     private readonly IContextMenuFactory _contextMenuFactory;
+
+    private DockBandSettings _bandSettings;
 
     public ObservableCollection<DockItemViewModel> Items { get; } = new();
 
@@ -103,8 +105,18 @@ public sealed partial class DockBandViewModel : ExtensionObjectViewModel
     /// </summary>
     internal void SaveShowLabels()
     {
-        _bandSettings.ShowTitles = _showTitles;
-        _bandSettings.ShowSubtitles = _showSubtitles;
+        // Only write to settings if the label values actually changed from
+        // the snapshot. When multiple non-customized monitors share global
+        // bands, an unconditional save would overwrite changes made by
+        // another monitor's ViewModel (last-save-wins clobber).
+        var changed = _showTitlesSnapshot is null
+                   || _showTitles != _showTitlesSnapshot
+                   || _showSubtitles != _showSubtitlesSnapshot;
+        if (changed)
+        {
+            ReplaceBandInSettings(_bandSettings with { ShowTitles = _showTitles, ShowSubtitles = _showSubtitles });
+        }
+
         _showTitlesSnapshot = null;
         _showSubtitlesSnapshot = null;
     }
@@ -127,21 +139,91 @@ public sealed partial class DockBandViewModel : ExtensionObjectViewModel
         }
     }
 
+    private void ReplaceBandInSettings(DockBandSettings newSettings)
+    {
+        var commandId = _bandSettings.CommandId;
+        _settingsService.UpdateSettings(
+            s =>
+                {
+                    var dockSettings = s.DockSettings;
+
+                    // Update in global bands
+                    var updatedDock = dockSettings with
+                    {
+                        StartBands = ReplaceBandInList(dockSettings.StartBands, commandId, newSettings),
+                        CenterBands = ReplaceBandInList(dockSettings.CenterBands, commandId, newSettings),
+                        EndBands = ReplaceBandInList(dockSettings.EndBands, commandId, newSettings),
+                    };
+
+                    // Also update in per-monitor bands for customized monitors
+                    var configs = updatedDock.MonitorConfigs ?? ImmutableList<DockMonitorConfig>.Empty;
+                    var configsChanged = false;
+                    for (var i = 0; i < configs.Count; i++)
+                    {
+                        var config = configs[i];
+                        if (!config.IsCustomized)
+                        {
+                            continue;
+                        }
+
+                        var start = config.StartBands ?? ImmutableList<DockBandSettings>.Empty;
+                        var center = config.CenterBands ?? ImmutableList<DockBandSettings>.Empty;
+                        var end = config.EndBands ?? ImmutableList<DockBandSettings>.Empty;
+
+                        var newStart = ReplaceBandInList(start, commandId, newSettings);
+                        var newCenter = ReplaceBandInList(center, commandId, newSettings);
+                        var newEnd = ReplaceBandInList(end, commandId, newSettings);
+
+                        if (newStart != start || newCenter != center || newEnd != end)
+                        {
+                            configs = configs.SetItem(i, config with
+                            {
+                                StartBands = newStart,
+                                CenterBands = newCenter,
+                                EndBands = newEnd,
+                            });
+                            configsChanged = true;
+                        }
+                    }
+
+                    if (configsChanged)
+                    {
+                        updatedDock = updatedDock with { MonitorConfigs = configs };
+                    }
+
+                    return s with { DockSettings = updatedDock };
+                },
+            false);
+        _bandSettings = newSettings;
+    }
+
+    private static ImmutableList<DockBandSettings> ReplaceBandInList(ImmutableList<DockBandSettings> list, string commandId, DockBandSettings newSettings)
+    {
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i].CommandId == commandId)
+            {
+                return list.SetItem(i, newSettings);
+            }
+        }
+
+        return list;
+    }
+
     internal DockBandViewModel(
         CommandItemViewModel commandItemViewModel,
         WeakReference<IPageContext> errorContext,
         DockBandSettings settings,
-        DockSettings dockSettings,
-        Action saveSettings,
+        ISettingsService settingsService,
         IContextMenuFactory contextMenuFactory)
         : base(errorContext)
     {
         _rootItem = commandItemViewModel;
         _bandSettings = settings;
-        _dockSettings = dockSettings;
-        _saveSettings = saveSettings;
+        _settingsService = settingsService;
         _contextMenuFactory = contextMenuFactory;
 
+        var dockSettings = settingsService.Settings.DockSettings;
         _showTitles = settings.ResolveShowTitles(dockSettings.ShowLabels);
         _showSubtitles = settings.ResolveShowSubtitles(dockSettings.ShowLabels);
     }
@@ -293,6 +375,13 @@ public partial class DockItemViewModel : CommandItemViewModel
     {
         _showTitle = showTitle;
         _showSubtitle = showSubtitle;
+        PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName is nameof(Title) or nameof(Subtitle))
+            {
+                UpdateProperty(nameof(Tooltip));
+            }
+        };
     }
 }
 

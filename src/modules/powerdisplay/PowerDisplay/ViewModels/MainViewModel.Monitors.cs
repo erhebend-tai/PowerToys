@@ -26,6 +26,11 @@ public partial class MainViewModel
         {
             IsScanning = true;
 
+            // Forward the latest max-compatibility flag before each discovery so the
+            // DDC/CI controller picks up toggle changes without a process restart.
+            var settings = _settingsUtils.GetSettingsOrDefault<PowerDisplaySettings>(PowerDisplaySettings.ModuleName);
+            _monitorManager.SetMaxCompatibilityMode(settings.Properties.MaxCompatibilityMode);
+
             // Discover monitors
             var monitors = await _monitorManager.DiscoverMonitorsAsync(cancellationToken);
 
@@ -105,6 +110,9 @@ public partial class MainViewModel
         {
             IsScanning = true;
 
+            var settings = _settingsUtils.GetSettingsOrDefault<PowerDisplaySettings>(PowerDisplaySettings.ModuleName);
+            _monitorManager.SetMaxCompatibilityMode(settings.Properties.MaxCompatibilityMode);
+
             var monitors = await _monitorManager.DiscoverMonitorsAsync(_cancellationTokenSource.Token);
 
             _dispatcherQueue.TryEnqueue(() =>
@@ -125,6 +133,12 @@ public partial class MainViewModel
 
     private void UpdateMonitorList(IReadOnlyList<Monitor> monitors, bool isInitialLoad)
     {
+        // Dispose old ViewModels to unsubscribe PropertyChanged handlers
+        foreach (var vm in Monitors)
+        {
+            vm.Dispose();
+        }
+
         Monitors.Clear();
 
         // Load settings to check for hidden monitors

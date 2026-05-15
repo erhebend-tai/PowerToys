@@ -26,8 +26,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
-using Windows.UI.Core;
-using WinUIEx;
 using DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue;
 using VirtualKey = Windows.System.VirtualKey;
 
@@ -51,6 +49,7 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
     IRecipient<ShowToastMessage>,
     IRecipient<NavigateToPageMessage>,
     IRecipient<ShowHideDockMessage>,
+    IRecipient<ShowPinToDockDialogMessage>,
     INotifyPropertyChanged,
     IDisposable
 {
@@ -68,10 +67,11 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
     private readonly CompositeFormat _pageNavigatedAnnouncement;
 
     private SettingsWindow? _settingsWindow;
-    private DockWindow? _dockWindow;
+    private DockWindowManager? _dockWindowManager;
 
     private CancellationTokenSource? _focusAfterLoadedCts;
     private WeakReference<Page>? _lastNavigatedPageRef;
+    private bool _isDisposed;
 
     public ShellViewModel ViewModel { get; private set; } = App.Current.Services.GetService<ShellViewModel>()!;
 
@@ -102,6 +102,7 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
         WeakReferenceMessenger.Default.Register<NavigateToPageMessage>(this);
 
         WeakReferenceMessenger.Default.Register<ShowHideDockMessage>(this);
+        WeakReferenceMessenger.Default.Register<ShowPinToDockDialogMessage>(this);
 
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(ShellPage_OnPreviewKeyDown), true);
         AddHandler(KeyDownEvent, new KeyEventHandler(ShellPage_OnKeyDown), false);
@@ -114,8 +115,8 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
 
         if (App.Current.Services.GetRequiredService<ISettingsService>().Settings.EnableDock)
         {
-            _dockWindow = new DockWindow();
-            _dockWindow.Show();
+            _dockWindowManager = App.Current.Services.GetService<DockWindowManager>();
+            _dockWindowManager?.ShowDocks();
         }
     }
 
@@ -210,6 +211,45 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
         });
     }
 
+    public void Receive(ShowPinToDockDialogMessage message)
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                await HandlePinToDockDialogOnUiThread(message);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex.ToString());
+            }
+        });
+    }
+
+    private async Task HandlePinToDockDialogOnUiThread(ShowPinToDockDialogMessage message)
+    {
+        var (result, content) = await PinToDockDialogContent.ShowAsync(
+            this.XamlRoot,
+            message.Title,
+            message.Subtitle,
+            message.Icon,
+            message.DockSide,
+            message.AvailableMonitors);
+
+        if (result == ContentDialogResult.Primary)
+        {
+            var pinMessage = new PinToDockMessage(
+                message.ProviderId,
+                message.CommandId,
+                Pin: true,
+                Side: content.SelectedSide,
+                ShowTitles: content.ShowTitles,
+                ShowSubtitles: content.ShowSubtitles,
+                MonitorDeviceId: content.SelectedMonitorDeviceId);
+            WeakReferenceMessenger.Default.Send(pinMessage);
+        }
+    }
+
     // This gets called from the UI thread
     private async Task HandleConfirmArgsOnUiThread(IConfirmationArgs? args)
     {
@@ -269,6 +309,11 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
     {
         _ = DispatcherQueue.TryEnqueue(() =>
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
             OpenSettings(message.SettingsPageTag);
         });
     }
@@ -440,20 +485,23 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
         // However, then we have more fine-grained control on the back stack, managing the VM cache, and not
         // having that all be a black box, though then we wouldn't cache the XAML page itself, but sometimes that is a drawback.
         // However, we do a good job here, see ForwardStack.Clear below, and BackStack.Clear above about managing that.
-        if (withAnimation)
+        if (RootFrame.CanGoBack)
         {
-            RootFrame.GoBack();
-        }
-        else
-        {
-            RootFrame.GoBack(_noAnimation);
-        }
+            if (withAnimation)
+            {
+                RootFrame.GoBack();
+            }
+            else
+            {
+                RootFrame.GoBack(_noAnimation);
+            }
 
-        // Don't store pages we're navigating away from in the Frame cache
-        // TODO: In the future we probably want a short cache (3-5?) of recent VMs in case the user re-navigates
-        // back to a recent page they visited (like the Pokedex) so we don't have to reload it from  scratch.
-        // That'd be retrieved as we re-navigate in the PerformCommandMessage logic above
-        RootFrame.ForwardStack.Clear();
+            // Don't store pages we're navigating away from in the Frame cache
+            // TODO: In the future we probably want a short cache (3-5?) of recent VMs in case the user re-navigates
+            // back to a recent page they visited (like the Pokedex) so we don't have to reload it from  scratch.
+            // That'd be retrieved as we re-navigate in the PerformCommandMessage logic above
+            RootFrame.ForwardStack.Clear();
+        }
 
         if (!RootFrame.CanGoBack)
         {
@@ -489,19 +537,23 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
     {
         _ = DispatcherQueue.TryEnqueue(() =>
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
             if (message.ShowDock)
             {
-                if (_dockWindow is null)
+                if (_dockWindowManager is null)
                 {
-                    _dockWindow = new DockWindow();
+                    _dockWindowManager = App.Current.Services.GetService<DockWindowManager>();
                 }
 
-                _dockWindow.Show();
+                _dockWindowManager?.ShowDocks();
             }
-            else if (_dockWindow is not null)
+            else
             {
-                _dockWindow.Close();
-                _dockWindow = null;
+                _dockWindowManager?.HideDocks();
             }
         });
     }
@@ -790,10 +842,22 @@ public sealed partial class ShellPage : Microsoft.UI.Xaml.Controls.Page,
 
     public void Dispose()
     {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+
         _focusAfterLoadedCts?.Cancel();
         _focusAfterLoadedCts?.Dispose();
         _focusAfterLoadedCts = null;
 
-        _dockWindow?.Dispose();
+        var dockWindowManager = _dockWindowManager;
+        _dockWindowManager = null;
+        dockWindowManager?.Dispose();
+
+        GC.SuppressFinalize(this);
     }
 }

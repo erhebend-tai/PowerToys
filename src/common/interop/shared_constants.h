@@ -145,12 +145,17 @@ namespace CommonSharedConstants
 
     // Path to the events used by ZoomIt
     const wchar_t ZOOMIT_REFRESH_SETTINGS_EVENT[] = L"Local\\PowerToysZoomIt-RefreshSettingsEvent-f053a563-d519-4b0d-8152-a54489c13324";
+
+    // Path to the events used by GrabAndMove
+    const wchar_t GRABANDMOVE_REFRESH_SETTINGS_EVENT[] = L"Local\\PowerToysGrabAndMove-RefreshSettingsEvent-a7b3c1d2-4e5f-6a7b-8c9d-0e1f2a3b4c5d";
+    const wchar_t GRABANDMOVE_EXIT_EVENT[] = L"Local\\PowerToysGrabAndMove-ExitEvent-b8c4d2e3-5f6a-7b8c-9d0e-1f2a3b4c5d6e";
     const wchar_t ZOOMIT_EXIT_EVENT[] = L"Local\\PowerToysZoomIt-ExitEvent-36641ce6-df02-4eac-abea-a3fbf9138220";
     const wchar_t ZOOMIT_ZOOM_EVENT[] = L"Local\\PowerToysZoomIt-ZoomEvent-1e4190d7-94bc-4ad5-adc0-9a8fd07cb393";
     const wchar_t ZOOMIT_DRAW_EVENT[] = L"Local\\PowerToysZoomIt-DrawEvent-56338997-404d-4549-bd9a-d132b6766975";
     const wchar_t ZOOMIT_BREAK_EVENT[] = L"Local\\PowerToysZoomIt-BreakEvent-17f2e63c-4c56-41dd-90a0-2d12f9f50c6b";
     const wchar_t ZOOMIT_LIVEZOOM_EVENT[] = L"Local\\PowerToysZoomIt-LiveZoomEvent-390bf0c7-616f-47dc-bafe-a2d228add20d";
     const wchar_t ZOOMIT_SNIP_EVENT[] = L"Local\\PowerToysZoomIt-SnipEvent-2fd9c211-436d-4f17-a902-2528aaae3e30";
+    const wchar_t ZOOMIT_SNIPOCR_EVENT[] = L"Local\\PowerToysZoomIt-SnipOcrEvent-a7c3b1d2-9e4f-4a6b-8d5c-1f2e3a4b5c6d";
     const wchar_t ZOOMIT_RECORD_EVENT[] = L"Local\\PowerToysZoomIt-RecordEvent-74539344-eaad-4711-8e83-23946e424512";
 
     // Path to the events used by PowerDisplay
@@ -160,6 +165,7 @@ namespace CommonSharedConstants
     const wchar_t SETTINGS_UPDATED_POWER_DISPLAY_EVENT[] = L"Local\\PowerToysPowerDisplay-SettingsUpdatedEvent-2e4d6f8a-1c3b-5e7f-9a1d-4c6e8f0b2d3e";
     const wchar_t POWER_DISPLAY_SEND_SETTINGS_TELEMETRY_EVENT[] = L"Local\\PowerToysPowerDisplay-SettingsTelemetryEvent-8c4f2a1d-5e3b-7f9c-1a6d-3b8e5f2c9a7d";
     const wchar_t HOTKEY_UPDATED_POWER_DISPLAY_EVENT[] = L"Local\\PowerToysPowerDisplay-HotkeyUpdatedEvent-9d5f3a2b-7e1c-4b8a-6f3d-2a9e5c7b1d4f";
+    const wchar_t RESCAN_POWER_DISPLAY_MONITORS_EVENT[] = L"Local\\PowerToysPowerDisplay-RescanMonitorsEvent-7f3e8c5a-1d4b-4a9e-bc6f-5d8a2b9e3c4f";
 
     // IPC Messages used in PowerDisplay (Named Pipe communication)
     const wchar_t POWER_DISPLAY_TOGGLE_MESSAGE[] = L"Toggle";
@@ -172,7 +178,6 @@ namespace CommonSharedConstants
 
     // Path to events used by Keyboard Manager
     const wchar_t OPEN_NEW_KEYBOARD_MANAGER_EVENT[] = L"Local\\PowerToysOpenNewKeyboardManagerEvent-9c1d2e3f-4b5a-6c7d-8e9f-0a1b2c3d4e5f";
-    const wchar_t TOGGLE_KEYBOARD_MANAGER_ACTIVE_EVENT[] = L"Local\\PowerToysToggleKeyboardManagerActiveEvent-7f3a1d5c-2e94-4ff4-8b6a-90fd2bc4d2a7";
     const wchar_t KEYBOARD_MANAGER_ENGINE_INSTANCE_MUTEX[] = L"Local\\PowerToys_KBMEngine_InstanceMutex";
 
     // used from quick access window

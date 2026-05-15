@@ -127,7 +127,12 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
 
     private ProviderSettings GetProviderSettings(SettingsModel settings)
     {
-        return settings.GetProviderSettings(this);
+        if (!settings.ProviderSettings.TryGetValue(ProviderId, out var ps))
+        {
+            ps = new ProviderSettings();
+        }
+
+        return ps.WithConnection(this);
     }
 
     public async Task LoadTopLevelCommands(IServiceProvider serviceProvider)
@@ -140,9 +145,26 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
         }
 
         var settingsService = serviceProvider.GetRequiredService<ISettingsService>();
-        var settings = settingsService.Settings;
+        var providerSettings = GetProviderSettings(settingsService.Settings);
 
-        var providerSettings = GetProviderSettings(settings);
+        // Persist the connected provider settings (fallback commands, etc.)
+        settingsService.UpdateSettings(
+            s =>
+            {
+                if (!s.ProviderSettings.TryGetValue(ProviderId, out var ps))
+                {
+                    ps = new ProviderSettings();
+                }
+
+                var newPs = ps.WithConnection(this);
+
+                return s with
+                {
+                    ProviderSettings = s.ProviderSettings.SetItem(ProviderId, newPs),
+                };
+            },
+            hotReload: false);
+
         IsActive = providerSettings.IsEnabled;
         if (!IsActive)
         {
@@ -189,7 +211,7 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
                 SupportsPinning = true;
 
                 // Load pinned commands from saved settings
-                pinnedCommands = LoadPinnedCommands(four, providerSettings);
+                pinnedCommands = LoadPinnedCommands(four, settingsService.Settings);
             }
 
             Id = model.Id;
@@ -239,12 +261,6 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
         }
     }
 
-    private record TopLevelObjects(
-        ICommandItem[]? Commands,
-        IFallbackCommandItem[]? Fallbacks,
-        ICommandItem[]? PinnedCommands,
-        ICommandItem[]? DockBands);
-
     private void InitializeCommands(
         TopLevelObjects objects,
         IServiceProvider serviceProvider,
@@ -273,7 +289,24 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
 
         if (objects.PinnedCommands is not null)
         {
-            topLevelList.AddRange(objects.PinnedCommands.Select(c => make(c, TopLevelType.Normal)));
+            foreach (var pinnedCommand in objects.PinnedCommands)
+            {
+                var pinnedItem = make(pinnedCommand, TopLevelType.Normal);
+                var alreadyExists = false;
+                foreach (var existingItem in topLevelList)
+                {
+                    if (existingItem.Id == pinnedItem.Id)
+                    {
+                        alreadyExists = true;
+                        break;
+                    }
+                }
+
+                if (!alreadyExists)
+                {
+                    topLevelList.Add(pinnedItem);
+                }
+            }
         }
 
         TopLevelItems = topLevelList.ToArray();
@@ -301,8 +334,19 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
         var dockSettings = settings.DockSettings;
         var allPinnedCommands = dockSettings.AllPinnedCommands;
         var pinnedBandsForThisProvider = allPinnedCommands.Where(c => c.ProviderId == ProviderId);
+
+        // Track which command IDs we've already added to avoid duplicates
+        // from settings that were pinned multiple times.
+        HashSet<string> seenCommandIds = new(bands.Select(b => b.Id));
+
         foreach (var (providerId, commandId) in pinnedBandsForThisProvider)
         {
+            if (!seenCommandIds.Add(commandId))
+            {
+                Logger.LogWarning($"Skipping duplicate pinned dock band command {commandId} for provider {providerId}");
+                continue;
+            }
+
             Logger.LogDebug($"Looking for pinned dock band command {commandId} for provider {providerId}");
 
             // First, try to lookup the command as one of this provider's
@@ -365,11 +409,11 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
         return null;
     }
 
-    private ICommandItem[] LoadPinnedCommands(ICommandProvider4 model, ProviderSettings providerSettings)
+    private ICommandItem[] LoadPinnedCommands(ICommandProvider4 model, SettingsModel settings)
     {
         var pinnedItems = new List<ICommandItem>();
 
-        foreach (var pinnedId in providerSettings.PinnedCommandIds)
+        foreach (var pinnedId in settings.GetPinnedCommandIds(ProviderId))
         {
             try
             {
@@ -408,62 +452,185 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
     public void PinCommand(string commandId, IServiceProvider serviceProvider)
     {
         var settingsService = serviceProvider.GetRequiredService<ISettingsService>();
-        var settings = settingsService.Settings;
-        var providerSettings = GetProviderSettings(settings);
-
-        if (!providerSettings.PinnedCommandIds.Contains(commandId))
+        if (settingsService.Settings.IsCommandPinned(ProviderId, commandId))
         {
-            providerSettings.PinnedCommandIds.Add(commandId);
-
-            // Raise CommandsChanged so the TopLevelCommandManager reloads our commands
-            this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs(-1));
-            settingsService.Save(hotReload: false);
+            return;
         }
+
+        settingsService.UpdateSettings(
+            s => s.TryPinCommand(ProviderId, commandId),
+            hotReload: false);
+
+        // Raise CommandsChanged so the TopLevelCommandManager reloads our commands
+        this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs(-1));
     }
 
     public void UnpinCommand(string commandId, IServiceProvider serviceProvider)
     {
         var settingsService = serviceProvider.GetRequiredService<ISettingsService>();
-        var settings = settingsService.Settings;
-        var providerSettings = GetProviderSettings(settings);
-
-        if (providerSettings.PinnedCommandIds.Remove(commandId))
+        if (!settingsService.Settings.IsCommandPinned(ProviderId, commandId))
         {
-            // Raise CommandsChanged so the TopLevelCommandManager reloads our commands
-            this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs(-1));
-
-            settingsService.Save(hotReload: false);
+            return;
         }
+
+        settingsService.UpdateSettings(
+            s => s.TryUnpinCommand(ProviderId, commandId),
+            hotReload: false);
+
+        // Raise CommandsChanged so the TopLevelCommandManager reloads our commands
+        this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs(-1));
     }
 
-    public void PinDockBand(string commandId, IServiceProvider serviceProvider)
+    public void PinDockBand(string commandId, IServiceProvider serviceProvider, Dock.DockPinSide side = Dock.DockPinSide.Start, bool? showTitles = null, bool? showSubtitles = null, string? monitorDeviceId = null)
     {
         var settingsService = serviceProvider.GetRequiredService<ISettingsService>();
         var settings = settingsService.Settings;
+        var dockSettings = settings.DockSettings;
+
+        // Prevent duplicate pins — check the target destination's bands.
+        // When pinning to a specific monitor, check that monitor's resolved bands
+        // (which include forked-from-global bands). Otherwise, check global bands.
+        DockMonitorConfig? targetConfig = null;
+        if (monitorDeviceId is not null)
+        {
+            foreach (var cfg in dockSettings.MonitorConfigs)
+            {
+                if (string.Equals(cfg.MonitorDeviceId, monitorDeviceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetConfig = cfg;
+                    break;
+                }
+            }
+        }
+
+        var resolvedStart = targetConfig?.ResolveStartBands(dockSettings.StartBands) ?? dockSettings.StartBands;
+        var resolvedCenter = targetConfig?.ResolveCenterBands(dockSettings.CenterBands) ?? dockSettings.CenterBands;
+        var resolvedEnd = targetConfig?.ResolveEndBands(dockSettings.EndBands) ?? dockSettings.EndBands;
+
+        var alreadyPinned = resolvedStart.Any(b => b.CommandId == commandId && b.ProviderId == this.ProviderId) ||
+                            resolvedCenter.Any(b => b.CommandId == commandId && b.ProviderId == this.ProviderId) ||
+                            resolvedEnd.Any(b => b.CommandId == commandId && b.ProviderId == this.ProviderId);
+
+        if (alreadyPinned)
+        {
+            Logger.LogDebug($"Dock band '{commandId}' from provider '{this.ProviderId}' is already pinned; skipping.");
+            return;
+        }
+
         var bandSettings = new DockBandSettings
         {
             CommandId = commandId,
             ProviderId = this.ProviderId,
+            ShowTitles = showTitles,
+            ShowSubtitles = showSubtitles,
         };
-        settings.DockSettings.StartBands.Add(bandSettings);
+
+        if (monitorDeviceId is not null)
+        {
+            PinDockBandToMonitor(settingsService, bandSettings, side, monitorDeviceId);
+        }
+        else
+        {
+            PinDockBandGlobal(settingsService, bandSettings, side);
+        }
 
         // Raise CommandsChanged so the TopLevelCommandManager reloads our commands
         this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs(-1));
+    }
 
-        settingsService.Save(hotReload: false);
+    private static void PinDockBandGlobal(ISettingsService settingsService, DockBandSettings bandSettings, Dock.DockPinSide side)
+    {
+        settingsService.UpdateSettings(
+            s =>
+            {
+                var dockSettings = s.DockSettings;
+                return s with
+                {
+                    DockSettings = side switch
+                    {
+                        Dock.DockPinSide.Center => dockSettings with { CenterBands = dockSettings.CenterBands.Add(bandSettings) },
+                        Dock.DockPinSide.End => dockSettings with { EndBands = dockSettings.EndBands.Add(bandSettings) },
+                        _ => dockSettings with { StartBands = dockSettings.StartBands.Add(bandSettings) },
+                    },
+                };
+            },
+            hotReload: false);
+    }
+
+    private static void PinDockBandToMonitor(ISettingsService settingsService, DockBandSettings bandSettings, Dock.DockPinSide side, string monitorDeviceId)
+    {
+        settingsService.UpdateSettings(
+            s =>
+            {
+                var dockSettings = s.DockSettings;
+                var configs = dockSettings.MonitorConfigs ?? System.Collections.Immutable.ImmutableList<DockMonitorConfig>.Empty;
+
+                // Find or create the monitor config
+                DockMonitorConfig? target = null;
+                var targetIndex = -1;
+                for (var i = 0; i < configs.Count; i++)
+                {
+                    if (string.Equals(configs[i].MonitorDeviceId, monitorDeviceId, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        target = configs[i];
+                        targetIndex = i;
+                        break;
+                    }
+                }
+
+                if (target is null)
+                {
+                    // Monitor not yet in config; create and fork from global
+                    target = new DockMonitorConfig { MonitorDeviceId = monitorDeviceId, Enabled = true };
+                    target = target.ForkFromGlobal(dockSettings);
+                    configs = configs.Add(target);
+                    targetIndex = configs.Count - 1;
+                }
+                else if (!target.IsCustomized)
+                {
+                    // Fork from global on first per-monitor customization
+                    target = target.ForkFromGlobal(dockSettings);
+                }
+
+                // Add band to the appropriate section
+                target = side switch
+                {
+                    Dock.DockPinSide.Center => target with { CenterBands = (target.CenterBands ?? System.Collections.Immutable.ImmutableList<DockBandSettings>.Empty).Add(bandSettings) },
+                    Dock.DockPinSide.End => target with { EndBands = (target.EndBands ?? System.Collections.Immutable.ImmutableList<DockBandSettings>.Empty).Add(bandSettings) },
+                    _ => target with { StartBands = (target.StartBands ?? System.Collections.Immutable.ImmutableList<DockBandSettings>.Empty).Add(bandSettings) },
+                };
+
+                configs = configs.SetItem(targetIndex, target);
+
+                return s with
+                {
+                    DockSettings = dockSettings with { MonitorConfigs = configs },
+                };
+            },
+            hotReload: false);
     }
 
     public void UnpinDockBand(string commandId, IServiceProvider serviceProvider)
     {
         var settingsService = serviceProvider.GetRequiredService<ISettingsService>();
-        var settings = settingsService.Settings;
-        settings.DockSettings.StartBands.RemoveAll(b => b.CommandId == commandId && b.ProviderId == ProviderId);
-        settings.DockSettings.CenterBands.RemoveAll(b => b.CommandId == commandId && b.ProviderId == ProviderId);
-        settings.DockSettings.EndBands.RemoveAll(b => b.CommandId == commandId && b.ProviderId == ProviderId);
+        settingsService.UpdateSettings(
+            s =>
+            {
+                var dockSettings = s.DockSettings;
+                return s with
+                {
+                    DockSettings = dockSettings with
+                    {
+                        StartBands = dockSettings.StartBands.RemoveAll(b => b.CommandId == commandId && b.ProviderId == ProviderId),
+                        CenterBands = dockSettings.CenterBands.RemoveAll(b => b.CommandId == commandId && b.ProviderId == ProviderId),
+                        EndBands = dockSettings.EndBands.RemoveAll(b => b.CommandId == commandId && b.ProviderId == ProviderId),
+                    },
+                };
+            },
+            hotReload: false);
 
         // Raise CommandsChanged so the TopLevelCommandManager reloads our commands
         this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs(-1));
-        settingsService.Save(hotReload: false);
     }
 
     public ICommandProviderContext GetProviderContext() => this;
@@ -491,4 +658,10 @@ public sealed class CommandProviderWrapper : ICommandProviderContext
         this.DockBandItems = bands.ToArray();
         this.CommandsChanged?.Invoke(this, new ItemsChangedEventArgs());
     }
+
+    private record TopLevelObjects(
+        ICommandItem[]? Commands,
+        IFallbackCommandItem[]? Fallbacks,
+        ICommandItem[]? PinnedCommands,
+        ICommandItem[]? DockBands);
 }

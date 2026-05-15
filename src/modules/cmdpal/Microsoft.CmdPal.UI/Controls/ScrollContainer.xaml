@@ -7,106 +7,6 @@
     xmlns:local="using:Microsoft.CmdPal.UI.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
-    <UserControl.Resources>
-        <ResourceDictionary>
-            <Style x:Key="ScrollButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="{ThemeResource FlipViewNextPreviousButtonBackground}" />
-                <Setter Property="BackgroundSizing" Value="InnerBorderEdge" />
-                <Setter Property="Foreground" Value="{ThemeResource ButtonForeground}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource FlipViewNextPreviousButtonBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="Padding" Value="8,0,8,0" />
-                <Setter Property="Margin" Value="0" />
-                <Setter Property="HorizontalAlignment" Value="Left" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="FontFamily" Value="{ThemeResource ContentControlThemeFontFamily}" />
-                <Setter Property="FontWeight" Value="Normal" />
-                <Setter Property="FontSize" Value="{ThemeResource ControlContentThemeFontSize}" />
-                <Setter Property="UseSystemFocusVisuals" Value="{StaticResource UseSystemFocusVisuals}" />
-                <Setter Property="FocusVisualMargin" Value="-3" />
-                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <ContentPresenter
-                                x:Name="ContentPresenter"
-                                Padding="{TemplateBinding Padding}"
-                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                AnimatedIcon.State="Normal"
-                                AutomationProperties.AccessibilityView="Raw"
-                                Background="{TemplateBinding Background}"
-                                BackgroundSizing="{TemplateBinding BackgroundSizing}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                Content="{TemplateBinding Content}"
-                                ContentTemplate="{TemplateBinding ContentTemplate}"
-                                ContentTransitions="{TemplateBinding ContentTransitions}"
-                                CornerRadius="{TemplateBinding CornerRadius}">
-                                <ContentPresenter.BackgroundTransition>
-                                    <BrushTransition Duration="0:0:0.083" />
-                                </ContentPresenter.BackgroundTransition>
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <Storyboard>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Background">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource FlipViewNextPreviousButtonBackgroundPointerOver}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="BorderBrush">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource FlipViewNextPreviousButtonBorderBrushPointerOver}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource FlipViewNextPreviousArrowForegroundPointerOver}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                            </Storyboard>
-                                            <VisualState.Setters>
-                                                <Setter Target="ContentPresenter.(AnimatedIcon.State)" Value="PointerOver" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <Storyboard>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Background">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource FlipViewNextPreviousButtonBackgroundPressed}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="BorderBrush">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource FlipViewNextPreviousButtonBorderBrushPressed}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource FlipViewNextPreviousArrowForegroundPressed}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                            </Storyboard>
-                                            <VisualState.Setters>
-                                                <Setter Target="ContentPresenter.(AnimatedIcon.State)" Value="Pressed" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <Storyboard>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Background">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ButtonBackgroundDisabled}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="BorderBrush">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ButtonBorderBrushDisabled}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                                <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentPresenter" Storyboard.TargetProperty="Foreground">
-                                                    <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource ButtonForegroundDisabled}" />
-                                                </ObjectAnimationUsingKeyFrames>
-                                            </Storyboard>
-                                            <VisualState.Setters>
-                                                <!--  DisabledVisual Should be handled by the control, not the animated icon.  -->
-                                                <Setter Target="ContentPresenter.(AnimatedIcon.State)" Value="Normal" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                            </ContentPresenter>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-        </ResourceDictionary>
-    </UserControl.Resources>
     <Grid
         x:Name="RootGrid"
         Background="{x:Bind Background, Mode=OneWay}"
@@ -160,7 +60,7 @@
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Scroll left"
                 Click="ScrollBackBtn_Click"
-                Style="{StaticResource ScrollButtonStyle}"
+                Style="{StaticResource ScrollContainerScrollButtonStyle}"
                 ToolTipService.ToolTip="Scroll left"
                 Visibility="Collapsed">
                 <FontIcon
@@ -176,7 +76,7 @@
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Scroll right"
                 Click="ScrollForwardBtn_Click"
-                Style="{StaticResource ScrollButtonStyle}"
+                Style="{StaticResource ScrollContainerScrollButtonStyle}"
                 ToolTipService.ToolTip="Scroll right">
                 <FontIcon
                     x:Name="ScrollForwardIcon"
@@ -189,7 +89,7 @@
             <VisualStateGroup x:Name="OrientationStates">
                 <VisualState x:Name="HorizontalState">
                     <VisualState.Setters>
-                        <Setter Target="scroller.HorizontalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="scroller.HorizontalScrollBarVisibility" Value="Hidden" />
                         <Setter Target="scroller.HorizontalScrollMode" Value="Enabled" />
                         <Setter Target="scroller.VerticalScrollBarVisibility" Value="Disabled" />
                         <Setter Target="scroller.VerticalScrollMode" Value="Disabled" />
@@ -213,7 +113,7 @@
                     <VisualState.Setters>
                         <Setter Target="scroller.HorizontalScrollBarVisibility" Value="Disabled" />
                         <Setter Target="scroller.HorizontalScrollMode" Value="Disabled" />
-                        <Setter Target="scroller.VerticalScrollBarVisibility" Value="Disabled" />
+                        <Setter Target="scroller.VerticalScrollBarVisibility" Value="Hidden" />
                         <Setter Target="scroller.VerticalScrollMode" Value="Enabled" />
                         <Setter Target="ScrollBackBtn.Padding" Value="12,4,12,4" />
                         <Setter Target="ScrollBackBtn.Margin" Value="0,8,0,0" />
@@ -228,7 +128,7 @@
                         <Setter Target="ScrollForwardBtn.VerticalAlignment" Value="Bottom" />
                         <Setter Target="ScrollForwardBtn.(AutomationProperties.Name)" Value="Scroll down" />
                         <Setter Target="ScrollForwardBtn.(ToolTipService.ToolTip)" Value="Scroll down" />
-                        <Setter Target="ScrollForwardIcon.Glyph" Value="&#xE72A;" />
+                        <Setter Target="ScrollForwardIcon.Glyph" Value="&#xEDDC;" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

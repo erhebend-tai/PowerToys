@@ -2,10 +2,15 @@
 // The Microsoft Corporation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Collections.Generic;
+using System.Linq;
 using CommunityToolkit.Mvvm.Messaging;
 using ManagedCommon;
+using Microsoft.CmdPal.Ext.Apps;
+using Microsoft.CmdPal.Ext.Apps.Programs;
 using Microsoft.CmdPal.UI.ViewModels;
 using Microsoft.CmdPal.UI.ViewModels.Messages;
+using Microsoft.CmdPal.UI.ViewModels.Models;
 using Microsoft.CmdPal.UI.ViewModels.Services;
 using Microsoft.CmdPal.UI.ViewModels.Settings;
 using Microsoft.CommandPalette.Extensions;
@@ -18,11 +23,13 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
 {
     private readonly ISettingsService _settingsService;
     private readonly TopLevelCommandManager _topLevelCommandManager;
+    private readonly IMonitorService? _monitorService;
 
-    public CommandPaletteContextMenuFactory(ISettingsService settingsService, TopLevelCommandManager topLevelCommandManager)
+    public CommandPaletteContextMenuFactory(ISettingsService settingsService, TopLevelCommandManager topLevelCommandManager, IMonitorService? monitorService = null)
     {
         _settingsService = settingsService;
         _topLevelCommandManager = topLevelCommandManager;
+        _monitorService = monitorService;
     }
 
     /// <summary>
@@ -56,7 +63,31 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
         List<IContextItem> moreCommands = [];
         var itemId = commandItem.Command.Id;
         var providerContext = page.ProviderContext;
+
+        // AppListItems can be surfaced on the main page even though they still
+        // belong to the All Apps provider.
+        // MainListPage only returns our in-proc wrappers/items.
+        if (providerContext.ProviderId != AllAppsCommandProvider.WellKnownId &&
+            page is ListViewModel { IsMainPage: true } &&
+            commandItem.Model.Unsafe is AppListItem)
+        {
+            providerContext = _topLevelCommandManager.LookupProvider(AllAppsCommandProvider.WellKnownId)?.GetProviderContext() ?? providerContext;
+        }
+
         var supportsPinning = providerContext.SupportsPinning;
+
+        // Also bail early for ListItemViewModels that wrap a TopLevelViewModel.
+        // For those items, TopLevelViewModel.BuildContextMenu() already includes
+        // the correct pin commands by calling AddMoreCommandsToTopLevel with the
+        // item's own provider context. Adding them again here (using the page's
+        // potentially incorrect provider context) would produce duplicate pin
+        // entries such as two "Pin to Dock" buttons.
+        // Check SupportsPinning first to avoid the .Unsafe type-check in the
+        // common non-pinning case.
+        if (supportsPinning && commandItem.Model.Unsafe is TopLevelViewModel)
+        {
+            return results;
+        }
 
         if (supportsPinning &&
             !string.IsNullOrEmpty(itemId))
@@ -64,11 +95,9 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
             // Add pin/unpin commands for pinning items to the top-level or to
             // the dock.
             var providerId = providerContext.ProviderId;
-            if (_topLevelCommandManager.LookupProvider(providerId) is CommandProviderWrapper provider)
+            if (_topLevelCommandManager.LookupProvider(providerId) is CommandProviderWrapper)
             {
-                var providerSettings = _settingsService.Settings.GetProviderSettings(provider);
-
-                var alreadyPinnedToTopLevel = providerSettings.PinnedCommandIds.Contains(itemId);
+                var alreadyPinnedToTopLevel = _settingsService.Settings.IsCommandPinned(providerId, itemId);
 
                 // Don't add pin/unpin commands for items displayed as
                 // TopLevelViewModels that aren't already pinned.
@@ -90,7 +119,7 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
                     moreCommands.Add(contextItem);
                 }
 
-                TryAddPinToDockCommand(providerSettings, itemId, providerId, moreCommands, commandItem);
+                TryAddPinToDockCommand(itemId, providerId, moreCommands, commandItem);
             }
         }
 
@@ -124,33 +153,19 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
         List<IContextItem?> contextItems)
     {
         var itemId = topLevelItem.Id;
-        var supportsPinning = providerContext.SupportsPinning;
         List<IContextItem> moreCommands = [];
         var commandItem = topLevelItem.ItemViewModel;
 
         // Add pin/unpin commands for pinning items to the top-level or to
         // the dock.
         var providerId = providerContext.ProviderId;
-        if (_topLevelCommandManager.LookupProvider(providerId) is CommandProviderWrapper provider)
+        if (_topLevelCommandManager.LookupProvider(providerId) is CommandProviderWrapper)
         {
-            var providerSettings = _settingsService.Settings.GetProviderSettings(provider);
+            TryAddMovePinnedCommands(itemId, providerId, commandItem, moreCommands);
+            TryAddUnpinFromHomeCommand(itemId, providerId, commandItem, moreCommands);
+            TryAddPinToHomeCommand(itemId, providerId, commandItem, moreCommands);
 
-            var isPinnedSubCommand = providerSettings.PinnedCommandIds.Contains(itemId);
-            if (isPinnedSubCommand)
-            {
-                var pinToTopLevelCommand = new PinToCommand(
-                       commandId: itemId,
-                       providerId: providerId,
-                       pin: !isPinnedSubCommand,
-                       PinLocation.TopLevel,
-                       _settingsService,
-                       _topLevelCommandManager);
-
-                var contextItem = new PinToContextItem(pinToTopLevelCommand, commandItem);
-                moreCommands.Add(contextItem);
-            }
-
-            TryAddPinToDockCommand(providerSettings, itemId, providerId, moreCommands, commandItem);
+            TryAddPinToDockCommand(itemId, providerId, moreCommands, commandItem);
         }
 
         if (moreCommands.Count > 0)
@@ -162,8 +177,73 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
         }
     }
 
+    private void TryAddPinToHomeCommand(
+        string itemId,
+        string providerId,
+        CommandItemViewModel commandItem,
+        List<IContextItem> moreCommands)
+    {
+        if (_settingsService.Settings.IsCommandPinned(providerId, itemId))
+        {
+            return;
+        }
+
+        var pinToTopLevelCommand = new PinToCommand(
+            commandId: itemId,
+            providerId: providerId,
+            pin: true,
+            PinLocation.TopLevel,
+            _settingsService,
+            _topLevelCommandManager);
+
+        var contextItem = new PinToContextItem(pinToTopLevelCommand, commandItem);
+        moreCommands.Add(contextItem);
+    }
+
+    private void TryAddUnpinFromHomeCommand(
+        string itemId,
+        string providerId,
+        CommandItemViewModel commandItem,
+        List<IContextItem> moreCommands)
+    {
+        var isPinnedSubCommand = _settingsService.Settings.IsCommandPinned(providerId, itemId);
+        if (isPinnedSubCommand)
+        {
+            var pinToTopLevelCommand = new PinToCommand(
+                commandId: itemId,
+                providerId: providerId,
+                pin: !isPinnedSubCommand,
+                PinLocation.TopLevel,
+                _settingsService,
+                _topLevelCommandManager);
+
+            var contextItem = new PinToContextItem(pinToTopLevelCommand, commandItem);
+            moreCommands.Add(contextItem);
+        }
+    }
+
+    private void TryAddMovePinnedCommands(
+        string itemId,
+        string providerId,
+        CommandItemViewModel commandItem,
+        List<IContextItem> moreCommands)
+    {
+        if (!_settingsService.Settings.IsCommandPinned(providerId, itemId))
+        {
+            return;
+        }
+
+        var moveToTopCommand = new MovePinnedCommand(providerId, itemId, MovePinnedDirection.ToTop, _settingsService, _topLevelCommandManager);
+        moreCommands.Add(new MovePinnedContextItem(moveToTopCommand, commandItem));
+
+        var moveUpCommand = new MovePinnedCommand(providerId, itemId, MovePinnedDirection.Up, _settingsService, _topLevelCommandManager);
+        moreCommands.Add(new MovePinnedContextItem(moveUpCommand, commandItem));
+
+        var moveDownCommand = new MovePinnedCommand(providerId, itemId, MovePinnedDirection.Down, _settingsService, _topLevelCommandManager);
+        moreCommands.Add(new MovePinnedContextItem(moveDownCommand, commandItem));
+    }
+
     private void TryAddPinToDockCommand(
-        ProviderSettings providerSettings,
         string itemId,
         string providerId,
         List<IContextItem> moreCommands,
@@ -185,7 +265,9 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
             pin: !alreadyPinned,
             PinLocation.Dock,
             _settingsService,
-            _topLevelCommandManager);
+            _topLevelCommandManager,
+            commandItemViewModel: commandItem,
+            monitorService: _monitorService);
 
         var contextItem = new PinToContextItem(pinToTopLevelCommand, commandItem);
         moreCommands.Add(contextItem);
@@ -228,14 +310,40 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
         }
     }
 
+    private sealed partial class MovePinnedContextItem : CommandContextItem
+    {
+        private readonly MovePinnedCommand _command;
+        private readonly CommandItemViewModel _commandItem;
+
+        public MovePinnedContextItem(MovePinnedCommand command, CommandItemViewModel commandItem)
+            : base(command)
+        {
+            _command = command;
+            _commandItem = commandItem;
+            command.MoveStateChanged += this.OnMoveStateChanged;
+        }
+
+        private void OnMoveStateChanged(object? sender, EventArgs e)
+        {
+            _commandItem.RefreshMoreCommands();
+        }
+
+        ~MovePinnedContextItem()
+        {
+            _command.MoveStateChanged -= this.OnMoveStateChanged;
+        }
+    }
+
     private sealed partial class PinToCommand : InvokableCommand
     {
         private readonly string _commandId;
         private readonly string _providerId;
         private readonly ISettingsService _settingsService;
         private readonly TopLevelCommandManager _topLevelCommandManager;
+        private readonly IMonitorService? _monitorService;
         private readonly bool _pin;
         private readonly PinLocation _pinLocation;
+        private readonly CommandItemViewModel? _commandItemViewModel;
 
         private bool IsPinToDock => _pinLocation == PinLocation.Dock;
 
@@ -253,7 +361,9 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
             bool pin,
             PinLocation pinLocation,
             ISettingsService settingsService,
-            TopLevelCommandManager topLevelCommandManager)
+            TopLevelCommandManager topLevelCommandManager,
+            CommandItemViewModel? commandItemViewModel = null,
+            IMonitorService? monitorService = null)
         {
             _commandId = commandId;
             _providerId = providerId;
@@ -261,6 +371,8 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
             _settingsService = settingsService;
             _topLevelCommandManager = topLevelCommandManager;
             _pin = pin;
+            _commandItemViewModel = commandItemViewModel;
+            _monitorService = monitorService;
         }
 
         public override CommandResult Invoke()
@@ -312,7 +424,12 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
 
         private void PinToDock()
         {
-            PinToDockMessage message = new(_providerId, _commandId, true);
+            var title = _commandItemViewModel?.Title ?? string.Empty;
+            var subtitle = _commandItemViewModel?.Subtitle ?? string.Empty;
+            var icon = _commandItemViewModel?.Icon;
+            var dockSide = _settingsService.Settings.DockSettings.Side;
+            IReadOnlyList<MonitorInfo>? monitors = _monitorService?.GetMonitors();
+            ShowPinToDockDialogMessage message = new(_providerId, _commandId, title, subtitle, icon, dockSide, monitors);
             WeakReferenceMessenger.Default.Send(message);
         }
 
@@ -321,5 +438,86 @@ internal sealed partial class CommandPaletteContextMenuFactory : IContextMenuFac
             PinToDockMessage message = new(_providerId, _commandId, false);
             WeakReferenceMessenger.Default.Send(message);
         }
+    }
+
+    private sealed partial class MovePinnedCommand : InvokableCommand
+    {
+        private readonly string _providerId;
+        private readonly string _commandId;
+        private readonly MovePinnedDirection _moveDirection;
+        private readonly ISettingsService _settingsService;
+        private readonly TopLevelCommandManager _topLevelCommandManager;
+
+        public override IconInfo Icon => _moveDirection switch
+        {
+            MovePinnedDirection.ToTop => Icons.MoveToTopIcon,
+            MovePinnedDirection.Up => Icons.MoveUpIcon,
+            _ => Icons.MoveDownIcon,
+        };
+
+        public override string Name => _moveDirection switch
+        {
+            MovePinnedDirection.ToTop => RS_.GetString("top_level_move_to_top_command_name"),
+            MovePinnedDirection.Up => RS_.GetString("top_level_move_up_command_name"),
+            _ => RS_.GetString("top_level_move_down_command_name"),
+        };
+
+        internal event EventHandler? MoveStateChanged;
+
+        public MovePinnedCommand(
+            string providerId,
+            string commandId,
+            MovePinnedDirection moveDirection,
+            ISettingsService settingsService,
+            TopLevelCommandManager topLevelCommandManager)
+        {
+            _providerId = providerId;
+            _commandId = commandId;
+            _moveDirection = moveDirection;
+            _settingsService = settingsService;
+            _topLevelCommandManager = topLevelCommandManager;
+        }
+
+        public override CommandResult Invoke()
+        {
+            var moved = false;
+            _settingsService.UpdateSettings(
+                s =>
+                {
+                    var updated = _moveDirection switch
+                    {
+                        MovePinnedDirection.ToTop => s.TryMovePinnedCommandToTop(_providerId, _commandId),
+                        MovePinnedDirection.Up => s.TryMovePinnedCommand(_providerId, _commandId, true, IsLoaded),
+                        _ => s.TryMovePinnedCommand(_providerId, _commandId, false, IsLoaded),
+                    };
+
+                    moved = !ReferenceEquals(updated, s);
+                    return updated;
+                },
+                hotReload: false);
+
+            if (moved)
+            {
+                WeakReferenceMessenger.Default.Send<UpdateFallbackItemsMessage>();
+                MoveStateChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            return CommandResult.KeepOpen();
+
+            // Pass a visibility check so moves skip stale pinned entries
+            // (removed/disabled/failed extensions) that aren't shown on home.
+            bool IsLoaded(PinnedCommandSettings pin)
+            {
+                return _topLevelCommandManager.LookupCommand(pin.CommandId) is TopLevelViewModel cmd &&
+                       cmd.CommandProviderId == pin.ProviderId;
+            }
+        }
+    }
+
+    private enum MovePinnedDirection
+    {
+        ToTop,
+        Up,
+        Down,
     }
 }
