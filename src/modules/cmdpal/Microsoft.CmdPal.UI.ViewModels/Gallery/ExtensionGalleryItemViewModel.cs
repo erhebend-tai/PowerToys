@@ -2,6 +2,7 @@
 // The Microsoft Corporation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Collections.ObjectModel;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -48,6 +49,11 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
     private readonly IReadOnlyDictionary<string, GalleryInstallSource> _installSourcesByType;
     private readonly IReadOnlyDictionary<string, GallerySourceViewModel> _sourcesByKind;
 
+    // HTTP uris are set only for sources that can be opened in a browser
+    private readonly Uri? _homepageHttpUri;
+    private readonly Uri? _authorPageHttpUri;
+    private readonly Uri? _installLinkHttpUri;
+
     public ExtensionGalleryItemViewModel(
         GalleryExtensionEntry entry,
         ILogger<ExtensionGalleryItemViewModel> logger,
@@ -62,6 +68,9 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         _winGetOperationTrackerService = winGetOperationTrackerService;
         _installSourcesByType = BuildInstallSourceLookup(entry.InstallSources);
         (Sources, _sourcesByKind) = BuildSourceInfos(_installSourcesByType, entry.Homepage);
+        _homepageHttpUri = TryCreateWebUri(entry.Homepage);
+        _authorPageHttpUri = TryCreateWebUri(entry.Author?.Url);
+        _installLinkHttpUri = TryCreateWebUri(GetSource(SourceTypeGitHub)?.Uri ?? GetSource(SourceTypeWebsite)?.Uri);
         Screenshots = BuildScreenshots(entry.ScreenshotUrls);
 
         var resolvedIconUri = ResolveIconUri();
@@ -96,6 +105,13 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
 
     public string? Homepage => _entry.Homepage;
 
+    // Validated, browser-openable homepage uri. Null when the entry has no
+    // homepage or it is not a web uri. NavigateUri bindings must use this
+    // (a Uri) rather than the raw Homepage string: x:Bind evaluates bindings
+    // regardless of element visibility, and converting a null/invalid string
+    // to Uri throws and crashes the page.
+    public Uri? HomepageUri => _homepageHttpUri;
+
     public Uri IconUri { get; }
 
     public ImageSource IconSource
@@ -104,7 +120,13 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         private set => SetProperty(ref field, value);
     }
 
-    public IReadOnlyList<ExtensionGalleryScreenshotViewModel> Screenshots { get; }
+    // NOTE: This MUST be ObservableCollection<T> (not IReadOnlyList<T> or List<T>).
+    // ItemsView.ItemsSource (used on ExtensionGalleryItemPage) goes through a WinRT
+    // vector adapter; under AOT/trimming, only ObservableCollection<T> has a
+    // preserved IBindableObservableVector adapter. Other list types raise
+    // "Argument 'source' is not a supported vector" at set_ItemsSource time,
+    // crashing the page's first measure pass.
+    public ObservableCollection<ExtensionGalleryScreenshotViewModel> Screenshots { get; }
 
     public bool HasScreenshots => Screenshots.Count > 0;
 
@@ -114,11 +136,11 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
 
     public bool HasStoreSource => HasSource(SourceTypeStore);
 
-    public bool HasUrlSource => _installSourcesByType.ContainsKey(SourceTypeUrl) && !string.IsNullOrWhiteSpace(InstallUrl);
+    public bool HasUrlSource => _installSourcesByType.ContainsKey(SourceTypeUrl) && InstallUrl is not null;
 
-    public bool HasHomepage => !string.IsNullOrWhiteSpace(Homepage);
+    public bool HasHomepage => _homepageHttpUri is not null;
 
-    public bool HasAuthorUrl => !string.IsNullOrWhiteSpace(AuthorUrl);
+    public bool HasAuthorUrl => _authorPageHttpUri is not null;
 
     public bool HasGitHubSource => HasSource(SourceTypeGitHub);
 
@@ -167,7 +189,7 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
 
     public string? StoreId => GetSource(SourceTypeStore)?.Id;
 
-    public string? InstallUrl => GetSource(SourceTypeGitHub)?.Uri ?? GetSource(SourceTypeWebsite)?.Uri;
+    public string? InstallUrl => _installLinkHttpUri?.AbsoluteUri;
 
     public string WinGetInstallCommand => !string.IsNullOrWhiteSpace(WinGetId) ? $"winget install --id {WinGetId}" : string.Empty;
 
@@ -183,7 +205,7 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
 
     public string GitHubTooltip => GetSource(SourceTypeGitHub)?.Uri ?? Resources.gallery_item_github_source;
 
-    public string WebsiteTooltip => GetSource(SourceTypeWebsite)?.Uri ?? Homepage ?? Resources.gallery_item_website_source;
+    public string WebsiteTooltip => GetSource(SourceTypeWebsite)?.Uri ?? _homepageHttpUri?.AbsoluteUri ?? Resources.gallery_item_website_source;
 
     public string WinGetMenuText => !string.IsNullOrWhiteSpace(WinGetId)
         ? FormatResource(Resources.gallery_item_winget_menu_text_with_id, WinGetId)
@@ -293,21 +315,21 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         ApplySourceDetails(SourceTypeWinGet, CreateSourceDetails(packageInfo.Details));
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasHomepage))]
     private void OpenHomepage()
     {
-        if (!string.IsNullOrEmpty(Homepage))
+        if (_homepageHttpUri is not null)
         {
-            ShellHelpers.OpenInShell(Homepage);
+            ShellHelpers.OpenInShell(_homepageHttpUri.AbsoluteUri);
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasAuthorUrl))]
     private void OpenAuthorPage()
     {
-        if (!string.IsNullOrEmpty(AuthorUrl))
+        if (_authorPageHttpUri is not null)
         {
-            ShellHelpers.OpenInShell(AuthorUrl);
+            ShellHelpers.OpenInShell(_authorPageHttpUri.AbsoluteUri);
         }
     }
 
@@ -320,12 +342,12 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasUrlSource))]
     private void OpenInstallUrl()
     {
-        if (!string.IsNullOrEmpty(InstallUrl))
+        if (_installLinkHttpUri is not null)
         {
-            ShellHelpers.OpenInShell(InstallUrl);
+            ShellHelpers.OpenInShell(_installLinkHttpUri.AbsoluteUri);
         }
     }
 
@@ -516,14 +538,14 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
             || uri.Scheme.Equals("ms-appx", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyList<ExtensionGalleryScreenshotViewModel> BuildScreenshots(List<string>? screenshotUrls)
+    private static ObservableCollection<ExtensionGalleryScreenshotViewModel> BuildScreenshots(List<string>? screenshotUrls)
     {
+        ObservableCollection<ExtensionGalleryScreenshotViewModel> screenshots = [];
         if (screenshotUrls is null || screenshotUrls.Count == 0)
         {
-            return [];
+            return screenshots;
         }
 
-        List<ExtensionGalleryScreenshotViewModel> screenshots = [];
         HashSet<string> seenUris = new(OrdinalIgnoreCase);
         for (var i = 0; i < screenshotUrls.Count; i++)
         {
@@ -686,15 +708,21 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         };
     }
 
-    private static GallerySourceViewModel CreateSourceFromUrl(string? url)
+    private static GallerySourceViewModel? CreateSourceFromUrl(string? url)
     {
-        if (IsGitHubUri(url))
+        var webUri = TryCreateWebUri(url);
+        if (webUri is null)
+        {
+            return null;
+        }
+
+        if (IsGitHubUri(webUri))
         {
             return CreateSourceViewModel(
                 SourceTypeGitHub,
                 Resources.gallery_item_source_name_github,
                 id: null,
-                uri: url,
+                uri: webUri.AbsoluteUri,
                 isKnown: true);
         }
 
@@ -702,19 +730,19 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
             SourceTypeWebsite,
             Resources.gallery_item_source_name_website,
             id: null,
-            uri: url,
+            uri: webUri.AbsoluteUri,
             isKnown: true);
     }
 
     private static bool TryCreateSourceFromUri(string? uriValue, out GallerySourceViewModel source)
     {
         source = default!;
-        if (string.IsNullOrWhiteSpace(uriValue) || !Uri.TryCreate(uriValue, UriKind.Absolute, out _))
+        if (CreateSourceFromUrl(uriValue) is not { } webSource)
         {
             return false;
         }
 
-        source = CreateSourceFromUrl(uriValue);
+        source = webSource;
         return true;
     }
 
@@ -769,7 +797,7 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
     private static void AddDetail(ICollection<GallerySourceDetailItemViewModel> target, string label, string? value, string? uri)
     {
         var normalizedValue = ToNullIfWhiteSpace(value);
-        var normalizedUri = TryCreateUri(uri);
+        var normalizedUri = TryCreateWebUri(uri);
         if (normalizedValue is null && normalizedUri is null)
         {
             return;
@@ -778,14 +806,14 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         target.Add(new GallerySourceDetailItemViewModel(label, normalizedValue ?? normalizedUri!.AbsoluteUri, normalizedUri));
     }
 
-    private static Uri? TryCreateUri(string? value)
+    private static Uri? TryCreateWebUri(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value, UriKind.Absolute, out var uri))
         {
             return null;
         }
 
-        return uri;
+        return IsWebUri(uri) ? uri : null;
     }
 
     private static string? ToNullIfWhiteSpace(string? value)
@@ -824,15 +852,16 @@ public sealed partial class ExtensionGalleryItemViewModel : ObservableObject
         return builder.ToString();
     }
 
-    private static bool IsGitHubUri(string? value)
+    private static bool IsGitHubUri(Uri uri)
     {
-        if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
         return uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
             || uri.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsWebUri(Uri uri)
+    {
+        return uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool AreStatusTextsEquivalent(string first, string second)

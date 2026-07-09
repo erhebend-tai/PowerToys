@@ -12,7 +12,9 @@ using System.Threading.Tasks;
 using ManagedCommon;
 using PowerDisplay.Common.Interfaces;
 using PowerDisplay.Common.Models;
+using PowerDisplay.Common.Services;
 using PowerDisplay.Common.Utils;
+using PowerDisplay.Models;
 using static PowerDisplay.Common.Drivers.NativeConstants;
 using static PowerDisplay.Common.Drivers.NativeDelegates;
 using static PowerDisplay.Common.Drivers.PInvoke;
@@ -148,9 +150,9 @@ namespace PowerDisplay.Common.Drivers.DDC
         /// Discovers external DDC/CI-managed monitors. Each enumerated hMonitor runs its own
         /// async pipeline (filter → physical-handle retrieval → caps fetch + VCP init); all
         /// pipelines run concurrently via Task.WhenAll. Caller (MonitorManager) supplies the
-        /// pre-filtered external-target list from Phase 0.
+        /// displays it did not route to WMI — i.e. everything WmiMonitorBrightness did not expose.
         /// </summary>
-        /// <param name="targets">External-only display targets (pre-filtered by MonitorManager Phase 0).</param>
+        /// <param name="targets">Displays MonitorManager did not claim via WMI (not exposed by WmiMonitorBrightness).</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>List of DDC/CI-managed external monitors.</returns>
         public async Task<IEnumerable<Monitor>> DiscoverMonitorsAsync(
@@ -170,13 +172,41 @@ namespace PowerDisplay.Common.Drivers.DDC
                 return Enumerable.Empty<Monitor>();
             }
 
-            var pipelines = handles
-                .Select(h => DiscoverFromHandleAsync(h, targetsByGdi, cancellationToken))
-                .ToList();
-            var results = await Task.WhenAll(pipelines);
+            // Wrap the whole parallel discovery in a CrashDetectionScope: it writes discovery.lock
+            // on Begin and deletes it on Dispose, so if the process is killed during capabilities
+            // I/O (BSOD, FailFast, TerminateProcess) the surviving lock is picked up by
+            // CrashRecovery on the next startup. A single Begin/Dispose wraps the entire
+            // Task.WhenAll because CrashDetectionScope uses FileMode.CreateNew + FileShare.None
+            // and cannot be nested across the per-handle pipelines.
+            IReadOnlyList<Monitor>[] results;
+            CrashDetectionScope? scope;
+            try
+            {
+                scope = CrashDetectionScope.Begin();
+            }
+            catch (Exception scopeEx)
+            {
+                // Lock could not be written (e.g. read-only %LOCALAPPDATA%). Proceed without
+                // crash protection rather than failing discovery — log so this is diagnosable.
+                Logger.LogWarning(
+                    $"DDC: CrashDetectionScope.Begin failed ({scopeEx.GetType().Name}: {scopeEx.Message}); proceeding without crash protection");
+                scope = null;
+            }
+
+            try
+            {
+                var pipelines = handles
+                    .Select(h => DiscoverFromHandleAsync(h, targetsByGdi, cancellationToken))
+                    .ToList();
+                results = await Task.WhenAll(pipelines);
+            }
+            finally
+            {
+                scope?.Dispose();
+            }
 
             var monitors = results.SelectMany(r => r).ToList();
-            var newHandleMap = new Dictionary<string, IntPtr>();
+            var newHandleMap = new Dictionary<string, IntPtr>(MonitorIdComparer.Instance);
             foreach (var m in monitors)
             {
                 newHandleMap[m.Id] = m.Handle;
@@ -447,8 +477,15 @@ namespace PowerDisplay.Common.Drivers.DDC
         {
             if (TryGetVcpFeature(handle, VcpCodeBrightness, monitor.Id, out uint current, out uint max))
             {
-                monitor.BrightnessVcpMax = (int)max;
                 var brightnessInfo = new VcpFeatureValue((int)current, 0, (int)max);
+                if (!brightnessInfo.IsValid)
+                {
+                    Logger.LogWarning(
+                        $"DDC: [{monitor.Id}] Ignoring invalid brightness range current={current}, max={max}");
+                    return;
+                }
+
+                monitor.BrightnessVcpMax = (int)max;
                 monitor.CurrentBrightness = brightnessInfo.ToPercentage();
             }
         }
@@ -626,8 +663,8 @@ namespace PowerDisplay.Common.Drivers.DDC
 
                 if (!targetsByGdi.TryGetValue(gdiName, out var matchingInfos))
                 {
-                    // GDI name not in the external targets list — either a Phase 0 internal
-                    // panel or a target QueryDisplayConfig didn't enumerate. Skip BEFORE the
+                    // GDI name not in the DDC target list — either a panel already claimed by
+                    // WMI or a target QueryDisplayConfig didn't enumerate. Skip BEFORE the
                     // expensive GetPhysicalMonitorsFromHMONITOR call.
                     Logger.LogDebug($"DDC skipping {gdiName}: not in external targets list");
                     return Array.Empty<Monitor>();
@@ -654,6 +691,28 @@ namespace PowerDisplay.Common.Drivers.DDC
                     cancellationToken.ThrowIfCancellationRequested();
                     var physical = physicals[i];
                     var info = matchingInfos[i];
+
+#if DEBUG
+                    if (Environment.GetEnvironmentVariable("POWERDISPLAY_SIMULATE_CRASH") == "1")
+                    {
+                        // Debug-only: simulate a hard process kill to test the crash recovery
+                        // pipeline without invoking the kernel BSOD path. FailFast does not run
+                        // finally blocks, so the discovery.lock written by CrashDetectionScope
+                        // survives — just like a real BSOD.
+                        Logger.LogWarning("DEBUG: POWERDISPLAY_SIMULATE_CRASH=1 — invoking FailFast");
+                        Environment.FailFast("Simulated crash for quarantine testing");
+                    }
+#endif
+
+                    // Log identity of the monitor we are about to touch via DDC/CI BEFORE the
+                    // first syscall. If the call triggers a kernel stack-cookie overrun inside
+                    // win32kfull (see GH #47556 / #47968), this is the last log line that
+                    // survives — it has to carry enough to identify the offending hardware:
+                    // EdidId for blacklist matching, plus the human-readable name and full
+                    // DevicePath.
+                    var edidId = MonitorIdentity.EdidIdFromMonitorId(info.DevicePath);
+                    Logger.LogInfo(
+                        $"DDC: probing capabilities [EdidId={edidId}] [FriendlyName='{info.FriendlyName}'] [DevicePath={info.DevicePath}]");
 
                     // Async caps fetch (retry + max-compat probe). Awaits Task.Delay between
                     // retries instead of blocking the threadpool.

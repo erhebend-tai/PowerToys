@@ -9,6 +9,7 @@ using Microsoft.CmdPal.Common.Logging;
 using Microsoft.CmdPal.Common.Services;
 using Microsoft.CmdPal.Common.Text;
 using Microsoft.CmdPal.Common.WinGet.Services;
+using Microsoft.CmdPal.Ext.Actions;
 using Microsoft.CmdPal.Ext.Apps;
 using Microsoft.CmdPal.Ext.Bookmarks;
 using Microsoft.CmdPal.Ext.Calc;
@@ -161,7 +162,10 @@ public partial class App : Application, IDisposable
         services.AddSingleton<ICommandProvider, ShellCommandsProvider>();
         services.AddSingleton<ICommandProvider, CalculatorCommandProvider>();
         services.AddSingleton<ICommandProvider>(files);
-        services.AddSingleton<ICommandProvider, BookmarksCommandProvider>(_ => BookmarksCommandProvider.CreateWithDefaultStore());
+
+        var bookmarks = BookmarksCommandProvider.CreateWithDefaultStore();
+        services.AddSingleton<ICommandProvider>(bookmarks);
+        services.AddSingleton<IBookmarksManager>(bookmarks.BookmarksManager);
 
         services.AddSingleton<ICommandProvider, WindowWalkerCommandsProvider>();
         services.AddSingleton<ICommandProvider, WebSearchCommandsProvider>();
@@ -224,6 +228,11 @@ public partial class App : Application, IDisposable
 
             Logger.LogError("Couldn't load performance monitor", ex);
         }
+
+        if (ActionsCommandsProvider.IsActionsFeatureEnabled)
+        {
+            services.AddSingleton<ICommandProvider, ActionsCommandsProvider>();
+        }
     }
 
     private static void AddUIServices(ServiceCollection services, DispatcherQueue dispatcherQueue)
@@ -255,10 +264,16 @@ public partial class App : Application, IDisposable
         // Core services
         services.AddSingleton(appInfoService);
 
-        services.AddSingleton<IExtensionService, ExtensionService>();
+        // Load IExtensionServices here
+        services.AddSingleton<IExtensionService, BuiltInExtensionService>();
+        services.AddSingleton<IExtensionService, WinRTExtensionService>();
+
         services.AddSingleton<IRunHistoryService, RunHistoryService>();
 
         services.AddSingleton<IRootPageService, PowerToysRootPageService>();
+        services.AddSingleton<IRootPageAccessor>(static sp =>
+            new DeferredRootPageAccessor(() => sp.GetRequiredService<IRootPageService>()));
+
         services.AddSingleton<IAppHostService, PowerToysAppHostService>();
         services.AddSingleton<ITelemetryService, TelemetryForwarder>();
 
